@@ -1,13 +1,9 @@
 {
   "name": "fal-alkhair",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "scripts": {
-    "start": "node fal-alkhair.js"
-  },
-  "engines": {
-    "node": ">=18"
-  },
+  "scripts": { "start": "node fal-alkhair-v2.js" },
+  "engines": { "node": ">=20" },
   "dependencies": {
     "express": "^5.1.0",
     "tiktok-live-connector": "^2.5.0",
