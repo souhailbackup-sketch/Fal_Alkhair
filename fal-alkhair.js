@@ -62,7 +62,22 @@ function parse(text){
   return ok(parts[0]) && ok(parts[1]) ? parts : null;
 }
 const hash = s => { let h = 5381; for (const c of s) h = ((h << 5) + h + c.charCodeAt(0)) >>> 0; return h; };
-const who = d => { const u = d.user || d; return { id:String(u.uniqueId || d.uniqueId || u.userId || 'anon'), name:String(u.nickname || d.nickname || u.uniqueId || 'anon').slice(0, 20) }; };
+const who = d => { const u = d.user || d; return { id:String(u.id || u.displayId || u.uniqueId || u.userId || d.uniqueId || 'anon'), name:String(u.nickname || d.nickname || u.displayId || u.uniqueId || 'anon').slice(0, 20) }; };
+// Les noms de champs varient selon la version du protocole TikTok : on accepte les deux formes.
+function onChat(d){
+  cnt.chat++; bump('chat', 1); const t = String(d.content ?? d.comment ?? '');
+  if (!t.trim()) { note('(vide)', 'commentaire sans texte'); return; }
+  enqueue(who(d), t);
+}
+function onLike(d){
+  cnt.like++; const n = d.count ?? d.likeCount ?? 1; bump('like', n); pts(who(d), 'like', n); meter += n*cfg().points.meterPerLike;
+  if (meter >= 100) { meter = 0; forceNext = true; bc({ t:'mega' }); }
+}
+function onGift(d){
+  const g = d.gift || d.giftDetails || d, type = g.type ?? g.giftType; if (type === 1 && !d.repeatEnd) return;
+  cnt.gift++; bump('gift', 1); const dm = (g.diamondCount || d.diamondCount || 1)*(d.repeatCount || 1), u = who(d);
+  pts(u, 'gift', dm); boosts.add(u.id); bc({ t:'gift', name:u.name, d:dm });
+}
 
 /* ---------- état ---------- */
 const app = express(); app.use(express.json({ limit:'1mb' }));
@@ -121,16 +136,7 @@ async function startTT(pseudo){
   c.on(ControlEvent.CONNECTED, () => { live = true; bc({ t:'status', ok:true }); console.log('Connecté au live de @' + pseudo); });
   c.on(ControlEvent.DISCONNECTED, () => { live = false; bc({ t:'status', ok:false }); if (conn === c) setTimeout(() => conn === c && c.connect().catch(() => {}), 5000); });
   c.on(ControlEvent.ERROR, e => console.error('TikTok :', e && (e.message || e)));
-  c.on(WebcastEvent.CHAT, d => { cnt.chat++; bump('chat', 1); if (!d.comment) { note('(vide)', 'commentaire sans texte'); return; } enqueue(who(d), d.comment); });
-  c.on(WebcastEvent.LIKE, d => {
-    cnt.like++; const n = d.likeCount || 1; bump('like', n); pts(who(d), 'like', n); meter += n*cfg().points.meterPerLike;
-    if (meter >= 100) { meter = 0; forceNext = true; bc({ t:'mega' }); }
-  });
-  c.on(WebcastEvent.GIFT, d => {
-    const g = d.giftDetails || d; if (g.giftType === 1 && !d.repeatEnd) return;
-    cnt.gift++; bump('gift', 1); const dm = (g.diamondCount || d.diamondCount || 1)*(d.repeatCount || 1), u = who(d);
-    pts(u, 'gift', dm); boosts.add(u.id); bc({ t:'gift', name:u.name, d:dm });
-  });
+  c.on(WebcastEvent.CHAT, onChat); c.on(WebcastEvent.LIKE, onLike); c.on(WebcastEvent.GIFT, onGift);
   c.connect().catch(e => { console.error('Connexion impossible :', e && e.message); setTimeout(() => conn === c && startTikTok(pseudo), 8000); });
 }
 
